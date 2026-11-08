@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    name: API (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version: "0.13.7"
+          working-directory: api
+
+      - name: Instalar dependências
+        run: uv sync --locked
+
+      - name: Lint e formatação (ruff)
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Tipos (mypy strict)
+        run: uv run mypy
+
+      - name: Migrations e seed
+        run: |
+          uv run alembic upgrade head
+          uv run python -m financas.seed
+
+      - name: Testes (pytest)
+        run: uv run pytest --cov
+
+      - name: Avaliação (só regras; a parte com IA é pulada sem chave)
+        run: uv run python -m financas.evaluation
+
+  web:
+    name: Web (React)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Lint e formatação
+        run: |
+          npm run lint
+          npm run format:check
+
+      - name: Tipos
+        run: npm run typecheck
+
+      - name: Testes
+        run: npm test
+
+      - name: Build
+        run: npm run build

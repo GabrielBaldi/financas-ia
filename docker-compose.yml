@@ -1,0 +1,41 @@
+# API + Postgres + web with one command: `docker compose up --build`.
+# Not verified in the development environment (no Docker there); see the README.
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: financas
+      POSTGRES_PASSWORD: financas
+      POSTGRES_DB: financas
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U financas"]
+      interval: 2s
+      retries: 15
+    volumes:
+      - pgdata:/var/lib/postgresql
+
+  api:
+    build: ./api
+    environment:
+      DATABASE_URL: postgresql://financas:financas@db:5432/financas
+      CORS_ORIGINS: http://localhost:5102
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "8102:8102"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8102
+    ports:
+      - "5102:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
