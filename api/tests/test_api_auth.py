@@ -1,8 +1,9 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from financas.app import create_app
 from financas.config import Settings
-from tests.helpers import login, register_and_login, upload
+from tests.helpers import login, make_settings, register_and_login, upload
 
 
 def test_register_login_me_and_logout(client: TestClient) -> None:
@@ -67,11 +68,44 @@ def test_users_only_see_their_own_data(client: TestClient) -> None:
 def test_meta_reports_whether_ai_is_on(client: TestClient, settings: Settings) -> None:
     with_fake_ai = client.get("/meta").json()
     assert with_fake_ai["ai_enabled"] is True
-    assert with_fake_ai["ai_model"] == "claude-haiku-5-5"
     assert len(with_fake_ai["categories"]) == 16
 
     with TestClient(create_app(settings)) as no_ai_client:  # no key, no classifier
-        assert no_ai_client.get("/meta").json()["ai_enabled"] is False
+        assert no_ai_client.get("/meta").json() | {"categories": None} == {
+            "ai_enabled": False,
+            "ai_provider": None,
+            "ai_model": None,
+            "categories": None,
+        }
+
+
+@pytest.mark.parametrize(
+    ("keys", "provider", "model"),
+    [
+        ({"anthropic_api_key": "sk-ant-test"}, "anthropic", "claude-haiku-5-5"),
+        ({"nvidia_api_key": "nvapi-test"}, "nvidia", "minimaxai/minimax-m3.1-flash"),
+        (
+            {"nvidia_api_key": "nvapi-test", "nvidia_model": "exemplo/outro-modelo"},
+            "nvidia",
+            "exemplo/outro-modelo",
+        ),
+        ({"ai_provider": "nvidia", "anthropic_api_key": "sk-ant-test"}, None, None),
+    ],
+)
+def test_meta_names_the_ai_provider_and_model(
+    settings: Settings, keys: dict[str, str], provider: str | None, model: str | None
+) -> None:
+    # The real classifiers are built, but /meta never calls them.
+    app = create_app(make_settings(database_url=settings.database_url, **keys))
+
+    with TestClient(app) as test_client:
+        meta = test_client.get("/meta").json()
+
+    assert (meta["ai_enabled"], meta["ai_provider"], meta["ai_model"]) == (
+        provider is not None,
+        provider,
+        model,
+    )
 
 
 def test_logout_revokes_only_that_token(client: TestClient) -> None:

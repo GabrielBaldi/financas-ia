@@ -19,6 +19,9 @@ from financas.text import normalize
 class TransactionText:
     description: str
     amount_cents: int
+    # False when an answer is already known elsewhere (e.g. a Telegram entry for the same
+    # purchase): only the free rule layers run, and what they cannot decide goes to review.
+    ask_ai: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +62,11 @@ class Categorizer:
         decisions: list[Decision | None] = [
             self._decide_by_rules(item, user_rules) for item in items
         ]
-        leftovers = [index for index, decision in enumerate(decisions) if decision is None]
+        leftovers = [
+            index
+            for index, decision in enumerate(decisions)
+            if decision is None and items[index].ask_ai
+        ]
 
         usage = TokenUsage()
         if self._classifier is not None and leftovers:

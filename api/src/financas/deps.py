@@ -20,7 +20,7 @@ class AppContext:
     settings: Settings
     session_factory: sessionmaker[Session]
     categorizer: Categorizer
-    pricing: AIPricing
+    pricing: AIPricing | None  # None: the AI provider has no price configured (NVIDIA)
 
 
 def get_context(request: Request) -> AppContext:

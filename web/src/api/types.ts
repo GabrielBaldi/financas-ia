@@ -20,14 +20,22 @@ export type Category =
 
 export type Source = 'user_rule' | 'keyword' | 'ai' | 'manual' | 'review'
 
+/** 'telegram': typed in the bot and not yet found in an imported statement. */
+export type Origin = 'import' | 'telegram'
+
 export interface Token {
   access_token: string
   token_type: 'bearer'
   expires_at: string
 }
 
+/** Which AI categorizes what the rules cannot (api/src/financas/config.py). */
+export type AiProvider = 'anthropic' | 'nvidia'
+
 export interface Meta {
   ai_enabled: boolean
+  /** null when the AI is off. */
+  ai_provider: AiProvider | null
   ai_model: string | null
   categories: { slug: Category; label: string }[]
 }
@@ -42,6 +50,9 @@ export interface Transaction {
   categorized_by: Source
   confidence: number | null
   suggested_category: Category | null
+  origin: Origin
+  /** The user's own words from Telegram, on a statement row that absorbed the entry. */
+  note: string | null
 }
 
 export interface TransactionPage {
@@ -66,11 +77,16 @@ export interface RuleCreated {
   applied: number
 }
 
+export interface Account {
+  id: number
+  name: string
+}
+
 export interface ImportSummary {
   id: number
   filename: string
   file_format: string
-  account: { id: number; name: string }
+  account: Account
   created_at: string
   total_rows: number
   inserted: number
@@ -82,6 +98,8 @@ export interface ImportSummary {
   ai_input_tokens: number
   ai_output_tokens: number
   ai_cost_usd: number
+  /** Telegram entries merged into rows of this statement. */
+  reconciled: number
 }
 
 export interface MonthTotal {
@@ -96,4 +114,16 @@ export interface Dashboard {
   income_cents: number
   by_category: { category: Category | null; total_cents: number }[]
   monthly: MonthTotal[]
+}
+
+export interface TelegramStatus {
+  linked: boolean
+  linked_at: string | null
+  /** null: entries go to "Lançamentos manuais". */
+  default_account: Account | null
+}
+
+export interface PairingCode {
+  code: string
+  expires_at: string
 }

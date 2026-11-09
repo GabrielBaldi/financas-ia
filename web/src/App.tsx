@@ -7,6 +7,7 @@ import { ImportPage } from './pages/ImportPage'
 import { LoginPage } from './pages/LoginPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { RulesPage } from './pages/RulesPage'
+import { TelegramPage } from './pages/TelegramPage'
 
 function RequireAuth({ children }: { children: ReactNode }) {
   return useToken() ? children : <Navigate to="/entrar" replace />
@@ -38,6 +39,7 @@ export function App() {
         <Route path="/painel" element={<DashboardPage />} />
         <Route path="/importar" element={<ImportPage />} />
         <Route path="/regras" element={<RulesPage />} />
+        <Route path="/telegram" element={<TelegramPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/revisao" replace />} />
     </Routes>

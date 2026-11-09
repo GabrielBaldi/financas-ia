@@ -1,8 +1,10 @@
-"""Claude as the last automatic layer of the pipeline.
+"""The AI, last automatic layer of the pipeline, and Claude as its default provider.
 
 Only transactions the rules could not categorize get here, all of them in one request with
 structured output. The answer is still validated item by item: anything invalid, missing or
-below the confidence threshold ends up in "A revisar" instead of being trusted.
+below the confidence threshold ends up in "A revisar" instead of being trusted. The prompt,
+the schema and the validation here are shared with the OpenAI-compatible classifier
+(openai_compatible.py), so both providers are held to the same rules.
 """
 
 import json
@@ -139,7 +141,7 @@ def parse_suggestions(text: str, expected_ids: set[int]) -> dict[int, AISuggesti
     try:
         envelope = _Envelope.model_validate_json(text)
     except ValidationError:
-        logger.warning("Claude's answer is not the expected JSON; the whole batch goes to review")
+        logger.warning("The AI's answer is not the expected JSON; the whole batch goes to review")
         return {}
 
     suggestions: dict[int, AISuggestion] = {}
@@ -195,5 +197,5 @@ class ClaudeClassifier:
         return AIBatchResult(parse_suggestions(text, {item.id for item in items}), usage)
 
 
-def make_claude_classifier(api_key: str, model: str) -> ClaudeClassifier:
-    return ClaudeClassifier(anthropic.Anthropic(api_key=api_key, timeout=60.0), model)
+def make_claude_classifier(api_key: str, model: str, timeout: float = 60.0) -> ClaudeClassifier:
+    return ClaudeClassifier(anthropic.Anthropic(api_key=api_key, timeout=timeout), model)

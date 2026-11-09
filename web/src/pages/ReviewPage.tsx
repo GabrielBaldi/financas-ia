@@ -170,11 +170,25 @@ interface RowProps {
 }
 
 function LedgerRow({ transaction, suggestionLabel, onChange }: RowProps) {
-  const { date, description, amount_cents, category, categorized_by, confidence } = transaction
+  const { date, description, amount_cents, category, categorized_by, confidence, origin, note } =
+    transaction
   return (
     <tr className={category === null ? 'ledger__row ledger__row--review' : 'ledger__row'}>
       <td className="ledger__date">{formatDayMonth(date)}</td>
-      <td className="ledger__description">{description}</td>
+      <td className="ledger__description">
+        {description}
+        {origin === 'telegram' && (
+          <span className="tag">
+            Telegram<span className="visually-hidden">, ainda não conferido com o extrato</span>
+          </span>
+        )}
+        {note && (
+          <small className="ledger__note">
+            <span className="visually-hidden">Sua anotação: </span>
+            {note}
+          </small>
+        )}
+      </td>
       <td className="ledger__category">
         <CategorySelect
           aria-label={`Categoria de ${description}`}

@@ -6,6 +6,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from financas.categories import Category, Source
+from financas.config import AIProvider
+from financas.models import Origin
 
 
 class ORMModel(BaseModel):
@@ -35,6 +37,7 @@ class CategoryOut(BaseModel):
 
 class MetaOut(BaseModel):
     ai_enabled: bool
+    ai_provider: AIProvider | None
     ai_model: str | None
     categories: list[CategoryOut]
 
@@ -60,6 +63,7 @@ class ImportOut(ORMModel):
     ai_input_tokens: int
     ai_output_tokens: int
     ai_cost_usd: float
+    reconciled: int  # Telegram entries merged into rows of this statement
 
 
 class TransactionOut(ORMModel):
@@ -72,6 +76,8 @@ class TransactionOut(ORMModel):
     categorized_by: Source
     confidence: float | None
     suggested_category: Category | None
+    origin: Origin
+    note: str | None  # the user's words from Telegram, on a statement row that absorbed them
 
 
 class TransactionPage(BaseModel):
@@ -122,3 +128,18 @@ class DashboardOut(BaseModel):
     income_cents: int
     by_category: list[CategoryTotal]
     monthly: list[MonthTotal]
+
+
+class TelegramStatusOut(BaseModel):
+    linked: bool
+    linked_at: dt.datetime | None
+    default_account: AccountOut | None  # None: entries go to "Lançamentos manuais"
+
+
+class PairingCodeOut(BaseModel):
+    code: str = Field(examples=["048213"])
+    expires_at: dt.datetime
+
+
+class DefaultAccountIn(BaseModel):
+    account_id: int | None

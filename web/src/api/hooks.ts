@@ -1,13 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
 import type {
+  Account,
   Category,
   Dashboard,
   ImportSummary,
   Meta,
+  PairingCode,
   Rule,
   RuleCreated,
   Similar,
+  TelegramStatus,
   Transaction,
   TransactionPage,
 } from './types'
@@ -58,7 +61,7 @@ function useInvalidateData() {
   const queryClient = useQueryClient()
   return () =>
     Promise.all(
-      ['transactions', 'months', 'dashboard', 'imports', 'rules'].map((key) =>
+      ['transactions', 'months', 'dashboard', 'imports', 'rules', 'accounts'].map((key) =>
         queryClient.invalidateQueries({ queryKey: [key] }),
       ),
     )
@@ -104,5 +107,44 @@ export function useImportStatement() {
       return api<ImportSummary>('/imports', { method: 'POST', body: form })
     },
     onSuccess: invalidate,
+  })
+}
+
+export function useAccounts() {
+  return useQuery({ queryKey: ['accounts'], queryFn: () => api<Account[]>('/accounts') })
+}
+
+/** `watch`: while a pairing code is on screen, check every few seconds for the chat to connect. */
+export function useTelegramStatus({ watch = false } = {}) {
+  return useQuery({
+    queryKey: ['telegram'],
+    queryFn: () => api<TelegramStatus>('/telegram'),
+    refetchInterval: watch ? 3000 : false,
+  })
+}
+
+export function useCreatePairingCode() {
+  return useMutation({
+    mutationFn: () => api<PairingCode>('/telegram/pairing-code', { method: 'POST' }),
+  })
+}
+
+export function useUnlinkTelegram() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api<void>('/telegram/link', { method: 'DELETE' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['telegram'] }),
+  })
+}
+
+export function useSetDefaultAccount() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (accountId: number | null) =>
+      api<TelegramStatus>('/telegram/default-account', {
+        method: 'PUT',
+        json: { account_id: accountId },
+      }),
+    onSuccess: (status) => queryClient.setQueryData(['telegram'], status),
   })
 }

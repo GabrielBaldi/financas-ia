@@ -3,7 +3,9 @@ import { Link } from 'react-router'
 import { useImports, useImportStatement, useMeta } from '../api/hooks'
 import type { ImportSummary } from '../api/types'
 import { PipelineBar } from '../components/PipelineBar'
+import { aiCostLabel } from '../lib/ai'
 import { formatDateTime, formatUsd } from '../lib/format'
+import { reconciledMessage } from '../lib/telegram'
 import genericCsvUrl from '../../../samples/extrato-generico.csv?url'
 import ofxUrl from '../../../samples/extrato.ofx?url'
 import nubankCardUrl from '../../../samples/nubank-cartao.csv?url'
@@ -170,7 +172,7 @@ export function ImportPage() {
                     <td className="amount">{item.duplicates}</td>
                     <td className="amount">{item.by_ai}</td>
                     <td className="amount">{item.to_review}</td>
-                    <td className="amount">{formatUsd(item.ai_cost_usd)}</td>
+                    <td className="amount">{aiCostLabel(item)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -190,11 +192,12 @@ function ImportResult({ summary }: { summary: ImportSummary }) {
         {summary.total_rows} linhas lidas ({FORMAT_LABELS[summary.file_format]}):{' '}
         <strong>{summary.inserted} novas</strong>, {summary.duplicates} já existiam.
       </p>
+      {summary.reconciled > 0 && <p>{reconciledMessage(summary.reconciled)}.</p>}
       <PipelineBar counts={layerCounts(summary)} label="Quem categorizou as transações novas" />
       {summary.ai_input_tokens > 0 && (
         <p className="muted">
-          IA: {summary.ai_input_tokens} tokens de entrada e {summary.ai_output_tokens} de saída,
-          cerca de {formatUsd(summary.ai_cost_usd)}.
+          IA: {summary.ai_input_tokens} tokens de entrada e {summary.ai_output_tokens} de saída
+          {summary.ai_cost_usd > 0 ? `, cerca de ${formatUsd(summary.ai_cost_usd)}.` : '.'}
         </p>
       )}
       {summary.to_review > 0 && (

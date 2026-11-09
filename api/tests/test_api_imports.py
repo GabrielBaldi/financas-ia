@@ -1,7 +1,10 @@
+import pytest
 from fastapi.testclient import TestClient
 
+from financas.app import create_app
 from financas.categories import Category
-from tests.helpers import SAMPLES, FakeClassifier, upload
+from financas.config import Settings
+from tests.helpers import SAMPLES, FakeClassifier, make_settings, register_and_login, upload
 
 STATEMENT = """data;descrição;valor
 01/10/2026;Compra no débito - Padaria Pão Quente;-12,00
@@ -24,6 +27,21 @@ def test_import_reports_what_each_layer_did(
     assert (summary["by_keyword"], summary["by_ai"], summary["to_review"]) == (2, 1, 1)
     assert (summary["ai_input_tokens"], summary["ai_output_tokens"]) == (200, 40)
     assert summary["ai_cost_usd"] == (200 * 0.10 + 40 * 0.50) / 1_000_000
+
+
+@pytest.mark.usefixtures("session_factory")  # creates the tables
+def test_nvidia_imports_record_tokens_but_no_cost(
+    settings: Settings, fake_ai: FakeClassifier
+) -> None:
+    """No price is configured for NVIDIA: Claude's prices must not be used to guess one."""
+    nvidia = make_settings(database_url=settings.database_url, nvidia_api_key="nvapi-test")
+    fake_ai.answers["SUMUP *RECANTO VERDE"] = (Category.ALIMENTACAO, 0.9)
+
+    with TestClient(create_app(nvidia, classifier=fake_ai)) as client:
+        summary = upload(client, register_and_login(client), STATEMENT)
+
+    assert (summary["ai_input_tokens"], summary["ai_output_tokens"]) == (200, 40)
+    assert summary["ai_cost_usd"] == 0
 
 
 def test_reimporting_the_same_file_adds_nothing(

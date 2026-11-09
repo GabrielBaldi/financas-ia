@@ -8,6 +8,7 @@ const LINKS = [
   { to: '/painel', label: 'Painel' },
   { to: '/importar', label: 'Importar' },
   { to: '/regras', label: 'Regras' },
+  { to: '/telegram', label: 'Telegram' },
 ]
 
 function focusMain() {

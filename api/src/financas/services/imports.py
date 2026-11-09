@@ -1,4 +1,8 @@
-"""Store a parsed statement: skip rows already imported, categorize the rest, keep the stats."""
+"""Store a parsed statement: skip rows already imported, categorize the rest, keep the stats.
+
+New rows that turn out to be purchases already logged through Telegram absorb those entries
+(see services/reconciliation.py), so nothing is counted twice.
+"""
 
 import hashlib
 from collections import Counter
@@ -13,7 +17,14 @@ from financas.categorization.ai import TokenUsage
 from financas.categorization.pipeline import Categorizer, TransactionText
 from financas.categorization.user_rules import UserRule
 from financas.importers import ParsedRow
-from financas.models import Account, ImportBatch, Rule, Transaction
+from financas.models import ImportBatch, Origin, Rule, Transaction
+from financas.services.accounts import get_or_create_account
+from financas.services.reconciliation import (
+    apply_decision,
+    decision_of,
+    entries_for_statement_rows,
+    merged_decision,
+)
 from financas.text import normalize
 
 
@@ -43,18 +54,6 @@ def dedup_hashes(rows: Sequence[ParsedRow]) -> list[str]:
     return hashes
 
 
-def get_or_create_account(session: Session, user_id: int, name: str) -> Account:
-    name = name.strip()
-    account = session.scalar(
-        select(Account).where(Account.user_id == user_id, Account.name == name)
-    )
-    if account is None:
-        account = Account(user_id=user_id, name=name)
-        session.add(account)
-        session.flush()
-    return account
-
-
 def load_user_rules(session: Session, user_id: int) -> list[UserRule]:
     rules = session.scalars(select(Rule).where(Rule.user_id == user_id))
     return [UserRule(rule.pattern, rule.category) for rule in rules]
@@ -69,7 +68,7 @@ def import_rows(
     file_format: str,
     rows: Sequence[ParsedRow],
     categorizer: Categorizer,
-    pricing: AIPricing,
+    pricing: AIPricing | None,
 ) -> ImportBatch:
     account = get_or_create_account(session, user_id, account_name)
     hashes = dedup_hashes(rows)
@@ -86,11 +85,26 @@ def import_rows(
         if row_hash not in already_imported
     ]
 
+    entries = entries_for_statement_rows(
+        session, user_id=user_id, account_id=account.id, rows=[row for row, _ in new_rows]
+    )
     result = categorizer.categorize(
-        [TransactionText(row.description, row.amount_cents) for row, _ in new_rows],
+        [
+            # The AI is only asked about a matched row when the entry has no category to give.
+            TransactionText(
+                row.description,
+                row.amount_cents,
+                ask_ai=index not in entries or entries[index].category is None,
+            )
+            for index, (row, _) in enumerate(new_rows)
+        ],
         load_user_rules(session, user_id),
     )
-    sources = Counter(decision.source for decision in result.decisions)
+    decisions = [
+        merged_decision(decision, decision_of(entries[index])) if index in entries else decision
+        for index, decision in enumerate(result.decisions)
+    ]
+    sources = Counter(decision.source for decision in decisions)
 
     batch = ImportBatch(
         user_id=user_id,
@@ -106,26 +120,28 @@ def import_rows(
         to_review=sources[Source.REVIEW],
         ai_input_tokens=result.usage.input_tokens,
         ai_output_tokens=result.usage.output_tokens,
-        ai_cost_usd=pricing.cost_usd(result.usage),
+        # Without a price (NVIDIA's hosted API) the cost is recorded as 0, not guessed.
+        ai_cost_usd=pricing.cost_usd(result.usage) if pricing is not None else 0.0,
+        reconciled=len(entries),
     )
     session.add(batch)
     session.flush()
-    session.add_all(
-        Transaction(
+    for index, ((row, row_hash), decision) in enumerate(zip(new_rows, decisions, strict=True)):
+        transaction = Transaction(
             user_id=user_id,
             account_id=account.id,
             import_id=batch.id,
             date=row.date,
             description=row.description[:255],
             amount_cents=row.amount_cents,
-            category=decision.category,
-            categorized_by=decision.source,
-            confidence=decision.confidence,
-            suggested_category=decision.suggestion,
             dedup_hash=row_hash,
+            origin=Origin.IMPORT,
         )
-        for (row, row_hash), decision in zip(new_rows, result.decisions, strict=True)
-    )
+        apply_decision(transaction, decision)
+        if entry := entries.get(index):
+            transaction.note = entry.description
+            session.delete(entry)
+        session.add(transaction)
     session.commit()
     return batch
 

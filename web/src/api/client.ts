@@ -21,7 +21,7 @@ export function errorMessage(status: number, body: unknown): string {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   json?: unknown
   body?: FormData | URLSearchParams
 }

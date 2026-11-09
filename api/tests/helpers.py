@@ -1,14 +1,27 @@
-"""Shared test helpers: a fake AI classifier and shortcuts for the HTTP API."""
+"""Shared test helpers: a fake AI classifier, a fake clock and shortcuts for the HTTP API."""
 
+import datetime as dt
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 from fastapi.testclient import TestClient
 
 from financas.categories import Category
 from financas.categorization.ai import AIBatchResult, AIItem, AISuggestion, TokenUsage
+from financas.config import Settings
 
 SAMPLES = Path(__file__).resolve().parents[2] / "samples"
+
+
+def make_settings(**values: Any) -> Settings:
+    """Settings for a test: a developer's .env, AI keys and AI_PROVIDER never leak in."""
+    isolated: dict[str, Any] = {
+        "ai_provider": None,
+        "anthropic_api_key": None,
+        "nvidia_api_key": None,
+    }
+    return Settings(_env_file=None, **(isolated | values))
 
 
 class FakeClassifier:
@@ -28,6 +41,21 @@ class FakeClassifier:
                     id=item.id, category=category, confidence=confidence
                 )
         return AIBatchResult(suggestions, TokenUsage(100 * len(items), 20 * len(items)))
+
+
+# 15:00 UTC is noon in São Paulo: "today" is 2026-11-08 for the bot.
+NOW = dt.datetime(2026, 11, 8, 15, 0, tzinfo=dt.UTC)
+
+
+class FakeClock:
+    def __init__(self, now: dt.datetime = NOW) -> None:
+        self.now = now
+
+    def __call__(self) -> dt.datetime:
+        return self.now
+
+    def advance(self, **delta: float) -> None:
+        self.now += dt.timedelta(**delta)
 
 
 def login(client: TestClient, email: str, password: str = "senha-segura-1") -> dict[str, str]:

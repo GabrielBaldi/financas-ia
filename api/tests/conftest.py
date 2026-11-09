@@ -4,36 +4,56 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from financas.app import create_app
+from financas.categorization.pipeline import Categorizer
 from financas.config import Settings
 from financas.db import Base, make_engine, make_session_factory
-from tests.helpers import FakeClassifier, register_and_login
+from financas.telegram.bot import TelegramBot
+from tests.helpers import FakeClassifier, FakeClock, make_settings, register_and_login
 
 
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
-    # _env_file=None: a developer's local .env (and API key) must never leak into tests.
-    return Settings(
-        _env_file=None,
-        database_url=f"sqlite:///{(tmp_path / 'test.db').as_posix()}",
-        anthropic_api_key=None,
-    )
+    # A developer's local .env (and API keys) must never leak into tests.
+    return make_settings(database_url=f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
 
 
 @pytest.fixture
-def session(settings: Settings) -> Iterator[Session]:
+def session_factory(settings: Settings) -> Iterator[sessionmaker[Session]]:
     engine = make_engine(settings.database_url)
     Base.metadata.create_all(engine)
-    with make_session_factory(engine)() as db_session:
-        yield db_session
+    yield make_session_factory(engine)
     engine.dispose()
+
+
+@pytest.fixture
+def session(session_factory: sessionmaker[Session]) -> Iterator[Session]:
+    with session_factory() as db_session:
+        yield db_session
 
 
 @pytest.fixture
 def fake_ai() -> FakeClassifier:
     return FakeClassifier()
+
+
+@pytest.fixture
+def categorizer(fake_ai: FakeClassifier) -> Categorizer:
+    return Categorizer(fake_ai)
+
+
+@pytest.fixture
+def clock() -> FakeClock:
+    return FakeClock()
+
+
+@pytest.fixture
+def bot(
+    session_factory: sessionmaker[Session], categorizer: Categorizer, clock: FakeClock
+) -> TelegramBot:
+    return TelegramBot(session_factory, categorizer, clock)
 
 
 @pytest.fixture

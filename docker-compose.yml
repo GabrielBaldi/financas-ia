@@ -20,6 +20,8 @@ services:
       DATABASE_URL: postgresql://financas:financas@db:5432/financas
       CORS_ORIGINS: http://localhost:5102
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
     ports:
       - "8102:8102"
     depends_on:

@@ -196,8 +196,11 @@ main:focus {
 
 .ai-status {
   margin: 0;
+  min-width: 0;
   font-size: 0.8rem;
   color: var(--ink-2);
+  /* Model ids such as minimaxai/minimax-m3.1-flash have no spaces to wrap at. */
+  overflow-wrap: anywhere;
 }
 
 .ai-status::before {
@@ -635,6 +638,31 @@ input[type='file'] {
   font-weight: 600;
 }
 
+/* Typed in Telegram, still waiting for the statement row it will become. */
+.tag {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 0.15em 0.5em;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font: 700 0.68rem/1.3 var(--font-body);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  vertical-align: 0.12em;
+  white-space: nowrap;
+}
+
+/* The user's own words, kept on the bank's row after reconciliation. */
+.ledger__note {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--ink-2);
+  font-size: 0.85rem;
+  font-style: italic;
+  font-weight: 400;
+}
+
 .table-scroll {
   overflow-x: auto;
 }
@@ -842,6 +870,94 @@ input[type='file'] {
   gap: 0.35rem;
 }
 
+/* ---------- Telegram ---------- */
+
+.telegram-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+
+.telegram-card {
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+}
+
+.telegram-card > *,
+.telegram-card .notice,
+.telegram-card .hint {
+  margin: 0;
+}
+
+.link-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.link-status__dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  border: 1.5px solid var(--ink-2);
+  border-radius: 50%;
+}
+
+.link-status--on .link-status__dot {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+.pairing {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.pairing p {
+  margin: 0;
+}
+
+.pairing__code {
+  font:
+    600 clamp(2.1rem, 10vw, 2.8rem) / 1 ui-monospace,
+    'Cascadia Mono',
+    Consolas,
+    monospace;
+  letter-spacing: 0.18em;
+  font-variant-numeric: tabular-nums;
+}
+
+.steps.steps--compact {
+  margin: 0;
+}
+
+.steps.steps--compact li {
+  flex-wrap: nowrap;
+  padding: 0.45rem 0;
+}
+
+.steps.steps--compact li::before {
+  flex: none;
+  font-size: 1.15rem;
+}
+
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.examples code {
+  display: inline-block;
+  padding: 0.3em 0.6em;
+}
+
 /* ---------- Login ---------- */
 
 .login {
@@ -944,6 +1060,15 @@ input[type='file'] {
   .masthead__side {
     width: 100%;
     justify-content: space-between;
+  }
+
+  /* Five sections do not fit one row on a phone: wrap instead of hiding the last ones. */
+  .nav {
+    flex-wrap: wrap;
+  }
+
+  .nav__link {
+    padding-inline: 0.55rem;
   }
 
   .form--row {

@@ -67,3 +67,14 @@ def test_large_imports_are_split_into_batches() -> None:
     Categorizer(ai, batch_size=2).categorize(items, [])
 
     assert [len(batch) for batch in ai.batches] == [2, 2, 1]
+
+
+def test_items_marked_ask_ai_false_skip_the_ai() -> None:
+    ai = FakeClassifier({"MP *LOJADOZE": (Category.COMPRAS, 0.95)})
+
+    result = Categorizer(ai).categorize(
+        [TransactionText("MP *LOJADOZE", -3990, ask_ai=False), ITEMS[0]], USER_RULES
+    )
+
+    assert [d.source for d in result.decisions] == [Source.REVIEW, Source.KEYWORD]
+    assert ai.batches == []

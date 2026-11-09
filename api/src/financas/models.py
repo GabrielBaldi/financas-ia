@@ -53,13 +53,37 @@ def enum_column[E: StrEnum](enum_type: type[E]) -> Enum:
     )
 
 
+class Origin(StrEnum):
+    """Where a transaction came from."""
+
+    IMPORT = "import"  # a row of an uploaded statement
+    TELEGRAM = "telegram"  # typed by the user in the Telegram bot, not yet seen in a statement
+
+
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (Index("ix_users_telegram_chat_id", "telegram_chat_id", unique=True),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(254), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+
+    # The private Telegram chat allowed to log entries for this user (see financas.telegram).
+    telegram_chat_id: Mapped[int | None] = mapped_column(BigInteger)
+    telegram_linked_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    telegram_default_account_id: Mapped[int | None] = mapped_column(
+        # users -> accounts -> users is a cycle; use_alter lets SQLAlchemy order CREATE/DROP.
+        ForeignKey(
+            "accounts.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_users_telegram_default_account_id",
+        )
+    )
+    # One-time pairing code, stored only as a SHA-256 hash, like the login tokens.
+    telegram_pairing_code_hash: Mapped[str | None] = mapped_column(String(64))
+    telegram_pairing_expires_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
 
 
 class AuthToken(Base):
@@ -93,6 +117,17 @@ class Rule(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
 
 
+class TelegramPairingAttempt(Base):
+    """Wrong pairing codes sent from a Telegram chat, to lock out guessing."""
+
+    __tablename__ = "telegram_pairing_attempts"
+
+    chat_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    failures: Mapped[int]
+    last_failure_at: Mapped[datetime] = mapped_column(UtcDateTime)
+    locked_until: Mapped[datetime | None] = mapped_column(UtcDateTime)
+
+
 class ImportBatch(Base):
     """One uploaded statement, with a snapshot of how the pipeline categorized it."""
 
@@ -114,6 +149,8 @@ class ImportBatch(Base):
     ai_input_tokens: Mapped[int]
     ai_output_tokens: Mapped[int]
     ai_cost_usd: Mapped[float] = mapped_column(Float)
+    # Telegram entries that turned out to be rows of this statement (and were merged into them).
+    reconciled: Mapped[int] = mapped_column(default=0, server_default="0")
 
     account: Mapped[Account] = relationship(lazy="joined")
 
@@ -138,3 +175,8 @@ class Transaction(Base):
     confidence: Mapped[float | None] = mapped_column(Float)
     suggested_category: Mapped[Category | None] = mapped_column(enum_column(Category))
     dedup_hash: Mapped[str] = mapped_column(String(64))
+    origin: Mapped[Origin] = mapped_column(
+        enum_column(Origin), default=Origin.IMPORT, server_default=Origin.IMPORT.value
+    )
+    # The user's own words for a statement row, taken from the Telegram entry it absorbed.
+    note: Mapped[str | None] = mapped_column(String(255))

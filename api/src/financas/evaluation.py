@@ -2,8 +2,9 @@
 
     uv run python -m financas.evaluation [--dataset eval/transacoes_rotuladas.csv]
 
-Always measures the rules alone. With ANTHROPIC_API_KEY set it also measures rules + AI and
-reports the tokens and the estimated cost; without a key that part is skipped.
+Always measures the rules alone. With an AI key set (ANTHROPIC_API_KEY or NVIDIA_API_KEY,
+chosen as in the app, see config.py) it also measures rules + AI and reports the provider,
+the model, the tokens and, for Claude, the estimated cost; without a key that part is skipped.
 """
 
 import argparse
@@ -14,9 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from financas.categories import Category, Source
-from financas.categorization.ai import TokenUsage, make_claude_classifier
+from financas.categorization.ai import TokenUsage
+from financas.categorization.factory import make_categorizer, make_classifier, make_pricing
 from financas.categorization.pipeline import Categorizer, Decision, TransactionText
-from financas.config import Settings, get_settings
+from financas.config import AI_PROVIDER_LABELS, Settings, get_settings
 from financas.importers.values import parse_amount
 from financas.services.imports import AIPricing
 
@@ -89,6 +91,7 @@ def evaluate(dataset: Sequence[LabeledTransaction], categorizer: Categorizer) ->
 
 
 def format_report(title: str, report: EvalReport, pricing: AIPricing | None = None) -> str:
+    """Without `pricing` (rules only, or NVIDIA) the cost is not estimated."""
     lines = [
         f"== {title} ==",
         f"Transações:                 {report.total}",
@@ -102,12 +105,11 @@ def format_report(title: str, report: EvalReport, pricing: AIPricing | None = No
                 f"  {source.value:<8} decidiu {report.decided[source]:>3}, "
                 f"acertou {report.correct[source]:>3}"
             )
-    if pricing is not None:
-        cost = pricing.cost_usd(report.usage)
-        lines.append(
-            f"Tokens: {report.usage.input_tokens} entrada / {report.usage.output_tokens} saída"
-            f" (custo estimado US$ {cost:.4f})"
-        )
+    if pricing is not None or report.usage != TokenUsage():
+        tokens = f"Tokens: {report.usage.input_tokens} entrada / {report.usage.output_tokens} saída"
+        if pricing is not None:
+            tokens += f" (custo estimado US$ {pricing.cost_usd(report.usage):.4f})"
+        lines.append(tokens)
     if report.mistakes:
         lines.append("Erros:")
         lines.extend(
@@ -125,16 +127,16 @@ def run(dataset_path: Path, settings: Settings) -> str:
     dataset = load_dataset(dataset_path)
     sections = [format_report("Só regras", evaluate(dataset, Categorizer(None)))]
 
-    if settings.anthropic_api_key is None:
-        sections.append("== Regras + IA ==\nPulado: defina ANTHROPIC_API_KEY para medir.")
-    else:
-        classifier = make_claude_classifier(
-            settings.anthropic_api_key.get_secret_value(), settings.ai_model
+    classifier = make_classifier(settings)
+    if classifier is None or settings.ai_provider is None:
+        sections.append(
+            "== Regras + IA ==\nPulado: defina ANTHROPIC_API_KEY ou NVIDIA_API_KEY para medir."
         )
-        categorizer = Categorizer(classifier, settings.ai_min_confidence, settings.ai_batch_size)
-        pricing = AIPricing(settings.ai_input_price_per_mtok, settings.ai_output_price_per_mtok)
-        report = evaluate(dataset, categorizer)
-        sections.append(format_report(f"Regras + IA ({settings.ai_model})", report, pricing))
+    else:
+        provider = AI_PROVIDER_LABELS[settings.ai_provider]
+        report = evaluate(dataset, make_categorizer(settings, classifier))
+        title = f"Regras + IA ({provider} · {settings.active_ai_model})"
+        sections.append(format_report(title, report, make_pricing(settings)))
     return "\n\n".join(sections)
 
 
